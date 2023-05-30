@@ -107,7 +107,7 @@ def build_moralized_graph(data_matrix, alpha): #correct
     
     return G
 
-def direct_neighbor_removal(G, data_matrix, x_index, y_index, alpha):
+def direct_neighbor(data_matrix, x_index, y_index, alpha):
     """
     Function to check whether y_index is a neighbor of x_index. Notice that, when the function is called,
     y_index should belong to the Markov Boundary of x_index
@@ -127,35 +127,127 @@ def direct_neighbor_removal(G, data_matrix, x_index, y_index, alpha):
     else:
         T = [elem for elem in M_B_y if elem != x_index]
         
-    # Defining all subsets S in T usin the power set implementation provided by python
+    # Defining all subsets S in T using the power set implementation provided by python
     power_set_of_T = list(chain.from_iterable(combinations(T, r) for r in range(len(T)+1)))
     
     # Check whether y_index is independent of x_index given every S in the power set defined above
     count = 0
     
+    separating_set = []
+    
     for S in power_set_of_T:
-        count+= int(ci_test(data_matrix,x_index, y_index, list(S) ,alpha))
+        if ci_test(data_matrix,x_index, y_index, list(S) ,alpha):
+            count+= 1
+            break
+        
     
     if count == 0: # dependence is satisfied for every conditioning set S
         # y_index is a true neighbor of x_index
-        return G
+        return True
     else:
-        if (x_index, y_index) in G.edges:
-            G.remove_edge(x_index, y_index)
-            return G
+        return False
     
     
-def skeleton(G,data_matrix,alpha):
+def build_neighbors_dictionary(G,data_matrix,alpha):
     
     list_of_node_ids = list(G.nodes)
+    
+    neigh_dict = {}
+    
+    for node in list_of_node_ids:
+        neigh_dict[node] = []
+        
     
     for x_node in list_of_node_ids:
         M_B_x = Markov_Boundary(data_matrix, x_node, alpha)
         for y_node in M_B_x:
-            G = direct_neighbor_removal(G, data_matrix,x_node,y_node, alpha)
+            if direct_neighbor(data_matrix, x_node, y_node, alpha):
+                neigh_dict[x_node].append(y_node)
     
-    return G
+    return neigh_dict
                     
+    
+def second_step_GS(G,data_matrix, alpha):
+    
+    neigh_dict = build_neighbors_dictionary(G,data_matrix,alpha)
+    
+    list_of_nodes = list(G.nodes())
+    
+    # We now create the new graph
+    new_G = nx.DiGraph() 
+    for key in neigh_dict.keys():
+        for neigh in neigh_dict[key]:
+            new_G.add_edge(key, neigh)
+            new_G.add_edge(neigh,key)
+            
+    
+    triplets = [list(elem) for elem in combinations(list_of_nodes, 3)]
+    
+    triplets_with_permutations = [list(tripl) for elem in triplets for tripl in permutations(elem)]
+    
+    v_structures = []
+    
+    for triplet in triplets_with_permutations:
+        
+        a,b,c = triplet[0], triplet[1], triplet[2]
+        
+        if (b in neigh_dict[a]) and (b in neigh_dict[c]) and ((a not in neigh_dict[c]) and (c not in neigh_dict[a])):
+            
+            remaining_indices = [elem for elem in list_of_nodes if (elem != a) and (elem != c) and (elem!=b)]
+            
+            power_set = list(chain.from_iterable(combinations(remaining_indices, r) for r in range(len(remaining_indices)+1)))
+            
+            for S in power_set:
+                
+                if ci_test(data_matrix, a,c,list(S),alpha) and ((c,b,a) not in v_structures):
+                    v_structures.append((a,b,c))
+                    break
+
+    for triplet in v_structures:
+        
+        a,b,c = triplet[0], triplet[1], triplet[2]
+        
+        if (b,a) in new_G.edges():
+            
+            new_G.remove_edge(b,a)
+        
+        if (c,a) in new_G.edges:
+            
+            new_G.remove_edge(c,a)
+           
+        
+    return new_G
+
+
+def meek_orientation(data_matrix, alpha):
+    
+    # We build the moralize graph
+    G = build_moralized_graph(data_matrix, alpha)
+    # We build the graph keeping trace of the v structures
+    v_structure_G = second_step_GS(G,data_matrix, alpha)
+            
+                    
+    
+    
+    
+            
+            
+    
+   
+        
+      
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
     
                     

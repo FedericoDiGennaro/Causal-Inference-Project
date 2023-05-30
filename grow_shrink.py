@@ -22,7 +22,7 @@ z = 3
 s = 4
 alpha = 0.01
 print(f'testing with \\alpha = {alpha}')
-ci = ci_test(D1, x, s, [w, z], alpha)
+ci = ci_test(D1, x, w, [y], alpha)
 if ci:
     print('x and s are independent given {w,z}.')
 else:
