@@ -8,6 +8,9 @@ from sklearn.metrics import f1_score
 import numpy as np
 import matplotlib.pyplot as plt
 
+
+########### TASK 1 HELPER FUNCTIONS #################################
+
 def alpha_tuning(data_matrix, G): #correct
     
     """ 
@@ -245,6 +248,7 @@ def second_step_GS(G, data_matrix, alpha, MBs_dict):
 
 
 def meek_rule1(G):
+    
     list_of_nodes = list(G.nodes())
     triplets_comb = [list(elem) for elem in combinations(list_of_nodes, 3)]
     triplets = [list(tripl) for elem in triplets_comb for tripl in permutations(elem)]
@@ -252,40 +256,46 @@ def meek_rule1(G):
     
     for triplet in triplets:
         a, b, c = triplet[0], triplet[1], triplet[2]
-        edges = list(nx.edges(G))
         
-        if  ( ((a,b) in edges) and ((b,a) not in edges) and ((c,b) in edges) and ((b,c) in edges) ):
+        if  ( ((a,b) in G.edges()) and ((b,a) not in G.edges()) and ((c,b) in G.edges()) and ((b,c) in G.edges()) ):
             
-            if (c,b) in list(G.edges):
-                G.remove_edge(c,b)
+            #if (c,b) in G.edges():
+            G.remove_edge(c,b)
             
     return G
 
 
 def meek_rule2(G):
+    
     list_of_nodes = list(G.nodes())
+    
     triplets_comb = [list(elem) for elem in combinations(list_of_nodes, 3)]
     triplets = [list(tripl) for elem in triplets_comb for tripl in permutations(elem)]
     
     for triplet in triplets:
+        
         a, b, c = triplet[0], triplet[1], triplet[2]
+        
         edges = list(nx.edges(G))
         
         if  ( ((a,b) in edges) and ((b,a) not in edges) and ((b,c) in edges) and 
-             ((c,b) not in edges) and ((a,c) in edges) and ((c,a)) ):
+             ((c,b) not in edges) and ((a,c) in edges) and ((c,a) in edges) ):
             
-            if (c,a) in list(G.edges):
-                G.remove_edge(c,a) 
+            #if (c,a) in list(G.edges):
+            G.remove_edge(c,a) 
             
     return G
 
 
 def meek_rule3(G):
+    
     list_of_nodes = list(G.nodes())
+    
     quadruplets_comb = [list(elem) for elem in combinations(list_of_nodes, 4)]
     quadruplets = [list(tripl) for elem in quadruplets_comb for tripl in permutations(elem)]
     
     for quad in quadruplets:
+        
         a, b, c, d = quad[0], quad[1], quad[2], quad[3]
         
         edges = list(nx.edges(G))
@@ -295,8 +305,8 @@ def meek_rule3(G):
              and ((b,c) not in edges) and ((c,b) not in edges) and ((b,d) in edges)
              and ((d,b) not in edges) and ((c,d) in edges) and ((d,c) not in edges) ):
             
-            if (d,a) in list(G.edges):
-                G.remove_edge(d,a) 
+            #if (d,a) in list(G.edges):
+            G.remove_edge(d,a) 
             
     return G
 
@@ -304,11 +314,13 @@ def meek_rule3(G):
 def meek_rule4(G):
     
     list_of_nodes = list(G.nodes())
+    
     quadruplets_comb = [list(elem) for elem in combinations(list_of_nodes, 4)]
     quadruplets = [list(tripl) for elem in quadruplets_comb for tripl in permutations(elem)]
   
     
     for quad in quadruplets:
+        
         a, b, c, d = quad[0], quad[1], quad[2], quad[3]
           
         #create a list of edges of the v_structured graph
@@ -318,8 +330,8 @@ def meek_rule4(G):
             and ((a,d) in edges) and ((d,a) in edges) and ((b,c) not in edges) and ((c,b) not in edges)
             and ((b,d) not in edges) and ((d,b) in edges) and ((c,d) in edges) and ((d,c) not in edges) ):
             
-            if (b,a) in list(G.edges):
-                G.remove_edge(b,a) 
+            #if (b,a) in list(G.edges):
+            G.remove_edge(b,a) 
             
     return G
 
@@ -328,6 +340,7 @@ def meek_orientation(G, data_matrix, alpha):
     
     # We build the moralize graph
     G, MBs_dict = build_moralized_graph(data_matrix, alpha)
+    
     # We build the graph keeping trace of the v structures
     G_start = second_step_GS(G,data_matrix, alpha, MBs_dict)
     
@@ -341,12 +354,19 @@ def meek_orientation(G, data_matrix, alpha):
         if nx.is_isomorphic(G_start, G_final):
             print('Final graph is ready!!')
             break
+            
         else:
             G_start = G_final
     
     return G_final
-                    
+
+# -------------------------------------------------------------------------------------------------------------------------------
+
+
+########### TASK 2 HELPER FUNCTIONS #################################
     
+    
+
     
     
             
