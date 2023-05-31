@@ -364,7 +364,35 @@ def meek_orientation(G, data_matrix, alpha):
 
 
 ########### TASK 2 HELPER FUNCTIONS #################################
+
+
+def HHull(dir_G, bidir_G, S):
     
+    subset = copy(G)
+
+    F = set(G.nodes())
+
+    # Ancestor of S in G:
+    
+    anc_set = ancestors_general(nx.subgraph(self.g_dir, subset), S)
+    s = list(S)[0]
+    # connected component of S in anc_set:
+    con_comp = nx.node_connected_component(nx.subgraph(self.g_bi, anc_set), s)
+    
+    if con_comp == subset:
+        return subset
+    subset = con_comp
+    # Find the largest set of nodes which is ancestral for S and is a c-component:
+    while True:
+        anc_set = ancestors_general(nx.subgraph(self.g_dir, subset), S)
+        if anc_set == subset:
+            return subset
+        subset = anc_set
+        con_comp = nx.node_connected_component(nx.subgraph(self.g_bi, subset), s)
+        if con_comp == subset:
+            return subset
+        subset = con_comp
+
     
 
     
