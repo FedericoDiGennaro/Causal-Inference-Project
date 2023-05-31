@@ -56,32 +56,48 @@ def Markov_Boundary(data_matrix, x_index, alpha): #correct (we checked the resul
     
     # We initialize the markov boundary to be an empty set
     
-    M = []  
-    list_of_indices = list(range(data_matrix.shape[1]))
-    cont = 0
+    M = [] 
     
-    while cont + 1 + len(M) < len(list_of_indices):
-        cont = 0
+    M_start = []
+    
+    list_of_indices = list(range(data_matrix.shape[1]))
+    
+    while True:
+        
         for y_index in list_of_indices:
-            if y_index != x_index and y_index not in M:
+            
+            if (y_index != x_index) and (y_index not in M):
+                
                 if not ci_test(data_matrix,x_index,y_index, M, alpha):  # if dependent
                     M.append(y_index)
-                    break      
-                else:
-                    cont+=1
+        
+        if M == M_start:
+            break
+            
+        else:
+            M.sort()
+            M_start = M.copy()
                     
     # It now starts the shrink phase
     
     cont = 0
-    while cont < len(M) :
+    
+    M.sort()
+    
+    M_start = M.copy()
+    
+    while True:
         cont = 0
-        for y_index in M:
-            M_y = [elem for elem in M if elem != y_index]           
-            if ci_test(data_matrix,x_index,y_index, M_y, alpha):  # if independent
-                M.remove(y_index)
-                break
-            else:
-                cont+=1                    
+        for y in M:
+            M_y = [elem for elem in M if (elem != y)]
+            if ci_test(data_matrix,x_index,y, M_y, alpha):  # if independent
+                M.remove(y)
+        if M_start == M:
+            break
+        else:
+            M.sort()
+            M_start = M.copy()
+                
     return M
 
 
@@ -90,29 +106,33 @@ def build_moralized_graph(data_matrix, alpha): #correct
     # Initializing the graph
     G = nx.Graph()
     
+    MBs_dict = {}
+    
+    list_of_node_ids = list(range(data_matrix.shape[1]))
+    
     # Adding nodes to the graph
-    for node_id in range(data_matrix.shape[1]):
-        G.add_node(node_id)
-    
-    list_of_node_ids = np.arange(data_matrix.shape[1])
-    
     for node_id in list_of_node_ids:
-        M_B = Markov_Boundary(data_matrix, node_id, alpha)
+        G.add_node(node_id)
+        MBs_dict[node_id] = Markov_Boundary(data_matrix, node_id, alpha)
         
-        for neighbor in M_B:
-            G.add_edge(node_id, neighbor)
+    for key in MBs_dict.keys():
+        for node in MBs_dict[key]:
+            if key in MBs_dict[node]:
+                G.add_edge(node, key)
+            else:
+                MBs_dict[key].remove(node)
     
-    return G
+    return G, MBs_dict
 
-def direct_neighbor(data_matrix, x_index, y_index, alpha):
+def direct_neighbor(data_matrix, x_index, y_index, alpha, MBs_dict):
     """
     Function to check whether y_index is a neighbor of x_index. Notice that, when the function is called,
     y_index should belong to the Markov Boundary of x_index
     """
     
     # Defining Markov boundaries for both nodes
-    M_B_x = Markov_Boundary(data_matrix, x_index, alpha)
-    M_B_y = Markov_Boundary(data_matrix, y_index, alpha)
+    M_B_x = MBs_dict[x_index]
+    M_B_y = MBs_dict[y_index]
 
     
     # Computing the cardinalities
@@ -120,9 +140,9 @@ def direct_neighbor(data_matrix, x_index, y_index, alpha):
     
     # Defining T
     if card_mb_x < card_mb_y:
-        T = [elem for elem in M_B_x if elem != y_index]
+        T = [elem for elem in M_B_x if (elem != y_index)]
     else:
-        T = [elem for elem in M_B_y if elem != x_index]
+        T = [elem for elem in M_B_y if (elem != x_index)]
         
     # Defining all subsets S in T using the power set implementation provided by python
     power_set_of_T = list(chain.from_iterable(combinations(T, r) for r in range(len(T)+1)))
@@ -130,81 +150,96 @@ def direct_neighbor(data_matrix, x_index, y_index, alpha):
     # Check whether y_index is independent of x_index given every S in the power set defined above
     count = 0
     
-    separating_set = []
+    separating_set = None
     
     for S in power_set_of_T:
         if ci_test(data_matrix,x_index, y_index, list(S) ,alpha):
             count+= 1
+            separating_set = list(S)
             break
         
     
     if count == 0: # dependence is satisfied for every conditioning set S
         # y_index is a true neighbor of x_index
-        return True
+        return True, separating_set
     else:
-        return False
+        return False, separating_set
     
     
-def build_neighbors_dictionary(G,data_matrix,alpha):
+def build_neighbors_dictionary(G,data_matrix,alpha,MBs_dict):
     
     list_of_node_ids = list(G.nodes)
     
     neigh_dict = {}
+    sep_set_dict = {}
     
     for node in list_of_node_ids:
         neigh_dict[node] = []
+        for second_node in list_of_node_ids:
+            if node != second_node:
+                sep_set_dict[(node,second_node)] = None
         
     
     for x_node in list_of_node_ids:
-        M_B_x = Markov_Boundary(data_matrix, x_node, alpha)
-        for y_node in M_B_x:
-            if direct_neighbor(data_matrix, x_node, y_node, alpha):
+        for y_node in MBs_dict[x_node]: # in list(G.neighbors(x_node))
+            flag, sep_set = direct_neighbor(data_matrix, x_node, y_node, alpha, MBs_dict)
+            if flag:
                 neigh_dict[x_node].append(y_node)
+            
+            sep_set_dict[(x_node,y_node)] = sep_set # None if neighbors
+            
     
-    return neigh_dict
+    return neigh_dict, sep_set_dict
                     
     
-def second_step_GS(G,data_matrix, alpha):
+def second_step_GS(G, data_matrix, alpha, MBs_dict):
     
-    neigh_dict = build_neighbors_dictionary(G,data_matrix,alpha)
+    neigh_dict, sep_set_dict = build_neighbors_dictionary(G, data_matrix, alpha, MBs_dict)
     
     list_of_nodes = list(G.nodes())
     
     # We now create the new graph (edges directed in both directions)
     new_G = nx.DiGraph() 
+    
+    for node in list_of_nodes:
+        new_G.add_node(node)
+    
     for key in neigh_dict.keys():
         for neigh in neigh_dict[key]:
             new_G.add_edge(key, neigh)
             new_G.add_edge(neigh,key)
-            
+                       
     
     triplets = [list(elem) for elem in combinations(list_of_nodes, 3)]
     triplets_with_permutations = [list(tripl) for elem in triplets for tripl in permutations(elem)]
     
+    
     v_structures = []
     
     for triplet in triplets_with_permutations:
+        
         a,b,c = triplet[0], triplet[1], triplet[2]
         
-        if (b in neigh_dict[a]) and (b in neigh_dict[c]) and ((a not in neigh_dict[c]) and (c not in neigh_dict[a])):
-            remaining_indices = [elem for elem in list_of_nodes if (elem != a) and (elem != c) and (elem!=b)]
+        if ((b,a) in new_G.edges()) and ((b,c) in new_G.edges()) and ((a,c) not in new_G.edges()):
             
-            power_set = list(chain.from_iterable(combinations(remaining_indices, r) for r in range(len(remaining_indices)+1)))
-            
-            for S in power_set:
+            S = sep_set_dict[(a,c)]
+
+            if (S != None) and (b not in S):
                 
-                if ci_test(data_matrix, a,c,list(S),alpha) and ((c,b,a) not in v_structures):
-                    v_structures.append((a,b,c))
-                    break
+                if [c,b,a] not in v_structures:
+                    
+                    v_structures.append([a,b,c])
+                    
 
     for triplet in v_structures:
+        
         a,b,c = triplet[0], triplet[1], triplet[2]
         
         if (b,a) in new_G.edges():
             new_G.remove_edge(b,a)
         
-        if (c,a) in new_G.edges:
-            new_G.remove_edge(c,a)
+        if (b,c) in new_G.edges:
+            new_G.remove_edge(b,c)
            
     return new_G
 
@@ -292,9 +327,9 @@ def meek_rule4(G):
 def meek_orientation(G, data_matrix, alpha):
     
     # We build the moralize graph
-    G = build_moralized_graph(data_matrix, alpha)
+    G, MBs_dict = build_moralized_graph(data_matrix, alpha)
     # We build the graph keeping trace of the v structures
-    G_start = second_step_GS(G,data_matrix, alpha)
+    G_start = second_step_GS(G,data_matrix, alpha, MBs_dict)
     
     while True:
         
