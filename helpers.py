@@ -520,6 +520,49 @@ def MinCostIntervention(S, G_directed, G_bidirected, costs):
         
         H = new_hull
     
+def initialize_cal_H(G_directed, G_bidirected, S):
+    pa_S = set()
+    S_conn = set()
+    
+    for node in list(S):
+        pa_S = pa_S.union(set(G_directed.predecessors(node)))
+        S_conn = S_conn.union(set(G_bidirected.neighbors(node)))
+        
+    pa_double = pa_S.intersection(S_conn)
+    
+    V = set(G_directed.nodes())
+    
+    # initialization
+    V_minus_pa_double = V - pa_double
+    G_directed_V_minus_pa_double = G_directed.subgraph(V_minus_pa_double)
+    G_bidirected_V_minus_pa_double = G_bidirected.subgraph(V_minus_pa_double) 
+    
+    # Hhull
+    H = HHull(G_directed_V_minus_pa_double, G_bidirected_V_minus_pa_double, S)
+    
+    list_of_nodes = list(H)
+    
+    pairs_comb = [tuple(elem) for elem in combinations(list_of_nodes, 2)]
+    print(pairs_comb)
+    
+    cal_H = nx.Graph()
+    
+    for node in list(H.union({'x','y'})):
+        cal_H.add_node(node)
+        
+    for pair in pairs_comb:
+        if pair in G_bidirected.edges():
+            cal_H.add_edge(pair[0], pair[1])
+            
+    for node in list(S):
+        cal_H.add_edge(node,'y')
+        
+    for node in list(pa_S.intersection(H)):
+        cal_H.add_edge('x',node)
+        
+    return cal_H
+
+
 
 
     
