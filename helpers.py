@@ -365,33 +365,162 @@ def meek_orientation(G, data_matrix, alpha):
 
 ########### TASK 2 HELPER FUNCTIONS #################################
 
-
-def HHull(dir_G, bidir_G, S):
+def ancestor(G_bidirected, S):
     
-    subset = copy(G)
-
-    F = set(G.nodes())
-
-    # Ancestor of S in G:
+    if not isinstance(S,set):
+        raise TypeError
     
-    anc_set = ancestors_general(nx.subgraph(self.g_dir, subset), S)
-    s = list(S)[0]
-    # connected component of S in anc_set:
-    con_comp = nx.node_connected_component(nx.subgraph(self.g_bi, anc_set), s)
+    result = set()
     
-    if con_comp == subset:
-        return subset
-    subset = con_comp
-    # Find the largest set of nodes which is ancestral for S and is a c-component:
+    for node in S:
+        
+        ancestor_of_node = nx.ancestors(G_bidirected, node)
+        result = result.union(ancestor_of_node)
+    
+    return result.union(S)
+
+
+def HHull(G_directed, G_bidirected, S):
+    
+    set_S = set(S)
+    F = set(G_directed.nodes())
+    
+    # directed graph, bidirected graph, subset of vertices
+    
     while True:
-        anc_set = ancestors_general(nx.subgraph(self.g_dir, subset), S)
-        if anc_set == subset:
-            return subset
-        subset = anc_set
-        con_comp = nx.node_connected_component(nx.subgraph(self.g_bi, subset), s)
-        if con_comp == subset:
-            return subset
-        subset = con_comp
+        
+        # Finding F1
+        G_F_bidirected = G_bidirected.subgraph(F)       
+        connected_components_G_F = [elem for elem in nx.connected_components(G_F_bidirected)]
+        indices_and_len = [(index,len(elem)) for index,elem in enumerate(connected_components_G_F) if set_S.issubset(elem)]
+        try:
+            max_index = max(indices_and_len, key= lambda x: x[1])[0]
+        except:
+            print('Entering except condition')
+            return set_S
+        F1 = connected_components_G_F[max_index] # set
+        
+        # Finding F2
+        G_F1_directed = G_directed.subgraph(F1)       
+        F2 = ancestor(G_F1_directed, set_S)
+        
+        if F2 != F:
+            
+            F = F2
+        
+        else:
+            return F  
+        
+
+def hitting(S, set_of_sets):
+    
+    total_sets = len(set_of_sets)
+    cont = 0
+    for set_ in set_of_sets:
+        if len(S.intersection(set_)) != 0:
+            cont+=1
+    if cont == total_sets:
+        return True
+    return False
+
+
+def WMHS(set_of_sets, costs):
+    
+    # set of sets is a list of sets
+    # costs is a dictionary
+    
+    solution = set()
+    min_cost = sum(costs.values()) # worst case
+    
+    universal_set = set()
+    
+    for set_ in set_of_sets:
+        universal_set = universal_set.union(set_)
+        
+    power_set = list(chain.from_iterable(combinations(universal_set, r) for r in range(len(universal_set)+1)))
+    
+    for set_ in power_set:
+        
+        candidate_solution = set(set_)
+        
+        flag = hitting(candidate_solution, set_of_sets)
+        
+        if flag:
+            
+            current_cost = 0
+            
+            for node in candidate_solution:
+                current_cost+= costs[node]
+            
+            if current_cost < min_cost:
+                solution = candidate_solution
+                min_cost = current_cost
+            
+    return solution
+
+
+def MinCostIntervention(S, G_directed, G_bidirected, costs):
+    
+    F = set()
+    
+    V = set(G_directed.nodes())
+    
+    H = HHull(G_directed, G_bidirected,S)
+    
+    if H == S:
+        
+        return set()
+    
+    while True:
+        
+        while True:
+            
+            H_minus_S = H - S
+            
+            # Solving argmin of costs problem           
+            argmin = None
+            min_cost = sum(costs.values())
+            for node in H_minus_S:
+                if costs[node] <  min_cost:
+                    argmin = node
+                    min_cost = costs[node]
+            argmin = set(argmin)
+            
+            H_minus_argmin = H - argmin
+            G_directed_H_minus_argmin = G_directed.subgraph(H_minus_argmin)
+            G_bidirected_H_minus_argmin = G_bidirected.subgraph(H_minus_argmin) 
+            
+            new_hull = HHull(G_directed_H_minus_argmin, G_bidirected_H_minus_argmin, S)
+            
+            if new_hull == S:
+                
+                F = F.union(H)
+            
+            else:
+                
+                H = new_hull
+                
+        power_set_of_F = list(chain.from_iterable(combinations(F, r) for r in range(len(F)+1)))
+        set_of_sets = []
+        for elem in power_set_of_F:
+            new_elem = set(elem) - S
+            if new_elem not in set_of_sets:
+                set_of_sets.append(new_elem)
+                
+        A = WMHS(set_of_sets, costs)
+        
+        V_minus_A = V - A
+        G_directed_V_minus_A = G_directed.subgraph(V_minus_A)
+        G_bidirected_V_minus_A = G_bidirected.subgraph(V_minus_A) 
+        new_hull = HHull(G_directed_V_minus_A, G_bidirected_V_minus_A, S)
+        
+        if new_hull == S:
+            
+            return A
+        
+        H = new_hull
+    
+
 
     
 
