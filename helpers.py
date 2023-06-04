@@ -7,11 +7,12 @@ from itertools import chain, combinations, permutations
 from sklearn.metrics import f1_score
 import numpy as np
 import matplotlib.pyplot as plt
+import random
 
 
 ########### TASK 1 HELPER FUNCTIONS #################################
 
-def alpha_tuning(data_matrix, G): #correct
+def alpha_tuning(data_matrix, G): 
     
     """ 
     The function takes as input a graph G, two vertices x and y
@@ -53,7 +54,7 @@ def alpha_tuning(data_matrix, G): #correct
     plt.xlabel('Alpha')
     plt.title('Choice of alpha')
     
-def Markov_Boundary(data_matrix, x_index, alpha): #correct (we checked the result theoretically)
+def Markov_Boundary(data_matrix, x_index, alpha): 
     
     # We start with the grow phase
     
@@ -64,6 +65,8 @@ def Markov_Boundary(data_matrix, x_index, alpha): #correct (we checked the resul
     M_start = []
     
     list_of_indices = list(range(data_matrix.shape[1]))
+    
+    random.shuffle(list_of_indices)
     
     while True:
         
@@ -104,7 +107,7 @@ def Markov_Boundary(data_matrix, x_index, alpha): #correct (we checked the resul
     return M
 
 
-def build_moralized_graph(data_matrix, alpha): #correct
+def build_moralized_graph(data_matrix, alpha): 
     
     # Initializing the graph
     G = nx.Graph()
@@ -233,18 +236,31 @@ def second_step_GS(G, data_matrix, alpha, MBs_dict):
                     
                     v_structures.append([a,b,c])
                     
+    # finding conflict
+    #conflicts = []
+    #for idx, structure1 in enumerate(v_structures[:-1]):
+        #a_1, b_1, c_1 = structure1[0], structure1[1], structure1[2]
+        #for structure2 in v_structures[idx + 1:]:
+            #a_2, b_2, c_2 = structure2[0], structure2[1], structure2[2]
+            
+            #if ((b_1 == a_2) and (c_1 == b_2)) or ((b_2 == a_1) and (c_2 == b_1)):
+                #conflict.append((structure1, structure2))
+                    
 
     for triplet in v_structures:
         
         a,b,c = triplet[0], triplet[1], triplet[2]
         
-        if (b,a) in new_G.edges():
+        flag = ((a,b) in new_G.edges()) and ((c,b) in new_G.edges()) # if True, no problem due to previous removal
+                
+        if ((b,a) in new_G.edges()) and flag:  
+            # if the second edge is not in the graph another triplet has been handled before
             new_G.remove_edge(b,a)
-        
-        if (b,c) in new_G.edges:
+            
+        if ((b,c) in new_G.edges) and flag:
             new_G.remove_edge(b,c)
            
-    return new_G
+    return new_G # v_structures
 
 
 def meek_rule1(G):
@@ -344,6 +360,7 @@ def meek_orientation(G, data_matrix, alpha):
     # We build the graph keeping trace of the v structures
     G_start = second_step_GS(G,data_matrix, alpha, MBs_dict)
     
+    
     while True:
         
         G_final = meek_rule1(G_start)
@@ -393,11 +410,13 @@ def HHull(G_directed, G_bidirected, S):
         G_F_bidirected = G_bidirected.subgraph(F)       
         connected_components_G_F = [elem for elem in nx.connected_components(G_F_bidirected)]
         indices_and_len = [(index,len(elem)) for index,elem in enumerate(connected_components_G_F) if set_S.issubset(elem)]
+        
         try:
             max_index = max(indices_and_len, key= lambda x: x[1])[0]
         except:
             print('Entering except condition')
             return set_S
+        
         F1 = connected_components_G_F[max_index] # set
         
         # Finding F2
@@ -483,7 +502,7 @@ def MinCostIntervention(S, G_directed, G_bidirected, costs):
                 if costs[node] <  min_cost:
                     argmin = node
                     min_cost = costs[node]
-            argmin = set(argmin)
+            argmin = set([argmin])
             
             
             H_minus_argmin = H - argmin
@@ -587,7 +606,7 @@ def min_nodes_cut(G,source_set,S,weights):
     cut_set = set()
     for node in G.nodes - S:
         if (str(node)+'_in' in setA and str(node)+'_out' in setB) or (str(node)+'_in' in setB and str(node)+'_out' in setA):
-            cut_set = cut_set.union(node)
+            cut_set = cut_set.union([node])
             
     return (cost,cut_set)
 
@@ -610,7 +629,7 @@ def heuristic_algorithm(G_directed, G_bidirected, S, costs): # taken from Sina's
     
     cost, cut_set = min_nodes_cut(G_bidirected.subgraph(H), pa_inter_H, S, new_costs)
     
-    return A
+    return cut_set
     
     
     
