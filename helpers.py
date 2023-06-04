@@ -521,6 +521,7 @@ def MinCostIntervention(S, G_directed, G_bidirected, costs):
             return A
         
         H = new_hull
+        
 
 def initialize_cal_H(G_directed, G_bidirected, S):
     pa_S = set()
@@ -545,7 +546,6 @@ def initialize_cal_H(G_directed, G_bidirected, S):
     list_of_nodes = list(H)
     
     pairs_comb = [tuple(elem) for elem in combinations(list_of_nodes, 2)]
-    print(pairs_comb)
     
     cal_H = nx.Graph()
     
@@ -562,7 +562,61 @@ def initialize_cal_H(G_directed, G_bidirected, S):
     for node in list(pa_S.intersection(H)):
         cal_H.add_edge('x',node)
         
-    return cal_H
+    return cal_H, pa_S.intersection(H), pa_double
+
+def min_nodes_cut(G,source_set,S,weights):
+    
+    weighted_edges_graph = nx.DiGraph()
+
+    for node in source_set:
+        weighted_edges_graph.add_edge('x',str(node)+'_in',capacity = np.inf)
+    
+    for node in S:
+        weighted_edges_graph.add_edge(str(node)+'_in',str(node)+'_out',capacity = np.inf)
+        weighted_edges_graph.add_edge(str(node)+'_out','y',capacity = np.inf)
+
+    for node in G.nodes - S:
+        weighted_edges_graph.add_edge(str(node)+'_in',str(node)+'_out',capacity=weights[node])
+        for neighbor in G.adj[node]:
+            weighted_edges_graph.add_edge(str(node)+'_out',str(neighbor)+'_in',capacity = np.inf)
+
+    cost, cut_sets = nx.minimum_cut(weighted_edges_graph,'x','y')
+
+    setA , setB = cut_sets
+
+    cut_set = set()
+    for node in G.nodes - S:
+        if (str(node)+'_in' in setA and str(node)+'_out' in setB) or (str(node)+'_in' in setB and str(node)+'_out' in setA):
+            cut_set = cut_set.union(node)
+            
+    return (cost,cut_set)
+
+def heuristic_algorithm(G_directed, G_bidirected, S, costs): # taken from Sina's paper
+    
+    # we need to move from min weith vertex cut to min weight edge cut and solve it with min flow max cut
+    
+    H = HHull(G_directed, G_bidirected, S)
+    
+    #cal_H, pa_inter_H, pa_double = initialize_cal_H(G_directed, G_bidirected, S)
+    
+    new_costs = {key:value for key,value in costs.items() if key not in S}
+    
+    pa_S = set()
+    
+    for node in S:
+        pa_S = pa_S.union(set(G_directed.predecessors(node)))
+    
+    pa_inter_H = H & pa_S
+    
+    cost, cut_set = min_nodes_cut(G_bidirected.subgraph(H), pa_inter_H, S, new_costs)
+    
+    return A
+    
+    
+    
+    
+    
+    
 
 
     
