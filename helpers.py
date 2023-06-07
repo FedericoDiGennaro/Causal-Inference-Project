@@ -1,4 +1,8 @@
-# Some helpers functions
+# This python file contains useful functions implementing the main algorithms to use in order to solve both tasks.
+# For a better understaing of each function, please refer to the main notebooks, where the functions are used 
+# and the results are plotted.
+
+# Importing useful libraries
 
 from ci_test import ci_test
 from scipy.io import loadmat
@@ -16,26 +20,29 @@ def alpha_tuning(data_matrix, G):
     
     """ 
     The function takes as input a graph G, two vertices x and y
-    and outputs whehter x and y are independent given Z
+    and plots how the performance of the CI test changes with respect to 
+    different values of alpha. This function is used to find the best value
+    for such hyperparameter.
     """
+    # The function receives a graph G, which is the true graph. This is useful in order
+    # to have the true labels (conditional independence or dependence) for every pair of nodes.
     
-    # We decide to pass G in order to use the already implemented function in networkx to
-    # check whether the nodes are truly d separated or not
-    
-    
+    # Defining a set of candidate values 
     alphas = np.arange(0.001,0.8,0.1) 
     indices = list(range(data_matrix.shape[1]))
     
     outputs, true_labels, f1_scores = [], [], []
     
     for alpha in alphas:
-    
+        
+        # Looping over (x,y) pairs to run the CI test and compare the results with the true label    
         for x_index in indices[:-1]:
             
             for y_index in indices[x_index+1:]:
                 
                 Z = [elem for elem in indices if (elem != x_index and elem != y_index)]
                 
+                # Defining the set of all potential separating sets
                 power_set = list(chain.from_iterable(combinations(Z, r) for r in range(len(Z)+1)))
                 
                 for set_ in power_set:
@@ -46,7 +53,8 @@ def alpha_tuning(data_matrix, G):
                     true_label = int(nx.d_separated(G, set([x_index]), set([y_index]), set(set_)))
                     true_labels.append(true_label)
                     
-    # We then use the F1 score as a metric to evaluate the performance of the chosen alpha
+        # We then use the F1 score as a metric to evaluate the performance of the chosen alpha.
+        # The F1 score is preferred over the accuracy since the labels are really unbalanced (many False)
         f1_scores.append(f1_score(true_labels, outputs))
         
     plt.plot(alphas,f1_scores)
@@ -55,11 +63,14 @@ def alpha_tuning(data_matrix, G):
     plt.title('Choice of alpha')
     
 def Markov_Boundary(data_matrix, x_index, alpha): 
+    """
+    This function returns the Markov Boundary for a given node x_index. Data_matrix and alpha
+    are used in order to compute CI tests which are essentials to build sucha a boundary.
+    """
     
-    # We start with the grow phase
+    # GROW PHASE: we iteratively add nodes to the boundary
     
     # We initialize the markov boundary to be an empty set
-    
     M = [] 
     
     M_start = []
@@ -68,23 +79,18 @@ def Markov_Boundary(data_matrix, x_index, alpha):
     
     random.shuffle(list_of_indices)
     
-    while True:
-        
-        for y_index in list_of_indices:
-            
-            if (y_index != x_index) and (y_index not in M):
-                
-                if not ci_test(data_matrix,x_index,y_index, M, alpha):  # if dependent
+    while True:       
+        for y_index in list_of_indices:           
+            if (y_index != x_index) and (y_index not in M):      
+                if not ci_test(data_matrix,x_index,y_index, M, alpha):  # if Dependent, add y_index to the MB
                     M.append(y_index)
-        
         if M == M_start:
-            break
-            
+            break    
         else:
             M.sort()
             M_start = M.copy()
                     
-    # It now starts the shrink phase
+    # SHRINK PHASE: we iteratively remove nodes from the boundaries
     
     cont = 0
     
@@ -108,19 +114,29 @@ def Markov_Boundary(data_matrix, x_index, alpha):
 
 
 def build_moralized_graph(data_matrix, alpha): 
+    """
+    This function builds an undirected graph (nx.Graph()) in which every node is connected to 
+    all the node in its Markov Boundary.
+    """
     
     # Initializing the graph
     G = nx.Graph()
     
+    # Inizializing a dictionary contaitning, for every node, its boundary (which will later become the set
+    # of its neigbors)
     MBs_dict = {}
     
     list_of_node_ids = list(range(data_matrix.shape[1]))
     
-    # Adding nodes to the graph
+    # AAdding entries to the dictionary and nodes to the graph
     for node_id in list_of_node_ids:
         G.add_node(node_id)
         MBs_dict[node_id] = Markov_Boundary(data_matrix, node_id, alpha)
-        
+    
+    # Before building the graph and adding edges, we must ensure that the Markov Boundaries are symmetric.
+    # This result holds theoretically, but it is not granted in practice because of the results of the CI test function.
+    # Therefore, whenever y is in the MB of x but x is not in the MB of y, we remove y from the MB of x. Otherwise,
+    # we build the edge
     for key in MBs_dict.keys():
         for node in MBs_dict[key]:
             if key in MBs_dict[node]:
@@ -133,7 +149,8 @@ def build_moralized_graph(data_matrix, alpha):
 def direct_neighbor(data_matrix, x_index, y_index, alpha, MBs_dict):
     """
     Function to check whether y_index is a neighbor of x_index. Notice that, when the function is called,
-    y_index should belong to the Markov Boundary of x_index
+    y_index should belong to the Markov Boundary of x_index (the condition is not checked here but must
+    be checked before calling the function).
     """
     
     # Defining Markov boundaries for both nodes
@@ -141,7 +158,7 @@ def direct_neighbor(data_matrix, x_index, y_index, alpha, MBs_dict):
     M_B_y = MBs_dict[y_index]
 
     
-    # Computing the cardinalities
+    # Computing the cardinalities in order to later define T
     card_mb_x, card_mb_y = len(M_B_x) - int(y_index in M_B_x), len(M_B_y) - int(x_index in M_B_y)
     
     # Defining T
@@ -158,6 +175,7 @@ def direct_neighbor(data_matrix, x_index, y_index, alpha, MBs_dict):
     
     separating_set = None
     
+    # As soon as we find a separating set, we save and later return it
     for S in power_set_of_T:
         if ci_test(data_matrix,x_index, y_index, list(S) ,alpha):
             count+= 1
@@ -173,12 +191,19 @@ def direct_neighbor(data_matrix, x_index, y_index, alpha, MBs_dict):
     
     
 def build_neighbors_dictionary(G,data_matrix,alpha,MBs_dict):
+    """
+    This helper function is useful to initialize two dictionaries containing the neighborhood for each node
+    (according to the definition and implementation illustrated in the previous function) and a separating
+    set for each pair of nodes.
+    """
     
     list_of_node_ids = list(G.nodes)
     
+    # Initializing empty dictionaries
     neigh_dict = {}
     sep_set_dict = {}
     
+    # Filling the dictionaries
     for node in list_of_node_ids:
         neigh_dict[node] = []
         for second_node in list_of_node_ids:
@@ -199,12 +224,17 @@ def build_neighbors_dictionary(G,data_matrix,alpha,MBs_dict):
                     
     
 def second_step_GS(G, data_matrix, alpha, MBs_dict):
+    """
+    This function implements the second step of the GS algorithms. We therefore identify the v structure
+    in the graph and then we remove some edges.
+    """
     
+    # Defining useful dictionaries
     neigh_dict, sep_set_dict = build_neighbors_dictionary(G, data_matrix, alpha, MBs_dict)
     
     list_of_nodes = list(G.nodes())
     
-    # We now create the new graph (edges directed in both directions)
+    # We now create the new undirected graph (edges directed in both directions)
     new_G = nx.DiGraph() 
     
     for node in list_of_nodes:
@@ -215,13 +245,15 @@ def second_step_GS(G, data_matrix, alpha, MBs_dict):
             new_G.add_edge(key, neigh)
             new_G.add_edge(neigh,key)
                        
-    
+    # Identifying all the triplets in the graph, also considering the permutations of the nodes.
     triplets = [list(elem) for elem in combinations(list_of_nodes, 3)]
     triplets_with_permutations = [list(tripl) for elem in triplets for tripl in permutations(elem)]
     
     
     v_structures = []
     
+    # Identifying v structures in the graph (according to the definition given in the pdf and implemented
+    # in the if clause)
     for triplet in triplets_with_permutations:
         
         a,b,c = triplet[0], triplet[1], triplet[2]
@@ -232,21 +264,14 @@ def second_step_GS(G, data_matrix, alpha, MBs_dict):
 
             if (S != None) and (b not in S):
                 
+                # We avoid saving the same triplets twice
                 if [c,b,a] not in v_structures:
                     
                     v_structures.append([a,b,c])
-                    
-    # finding conflict
-    #conflicts = []
-    #for idx, structure1 in enumerate(v_structures[:-1]):
-        #a_1, b_1, c_1 = structure1[0], structure1[1], structure1[2]
-        #for structure2 in v_structures[idx + 1:]:
-            #a_2, b_2, c_2 = structure2[0], structure2[1], structure2[2]
-            
-            #if ((b_1 == a_2) and (c_1 == b_2)) or ((b_2 == a_1) and (c_2 == b_1)):
-                #conflict.append((structure1, structure2))
-                    
 
+    # We deal with the v structures. Before removing and edge (let's say (a,b)), we verify whether the edge
+    # in the opposite directino ((b,a)) is still present. If not, it means we have already intervened on this pair
+    # of nodes and we avoid removing and edge, because we would otherwise remove every connection between the chosen nodes.
     for triplet in v_structures:
         
         a,b,c = triplet[0], triplet[1], triplet[2]
@@ -264,6 +289,9 @@ def second_step_GS(G, data_matrix, alpha, MBs_dict):
 
 
 def meek_rule1(G):
+    """
+    This function implements the first Meek's Rule.
+    """
     
     list_of_nodes = list(G.nodes())
     triplets_comb = [list(elem) for elem in combinations(list_of_nodes, 3)]
@@ -282,7 +310,10 @@ def meek_rule1(G):
 
 
 def meek_rule2(G):
-    
+    """
+    This function implements the second Meek's Rule.
+    """
+        
     list_of_nodes = list(G.nodes())
     
     triplets_comb = [list(elem) for elem in combinations(list_of_nodes, 3)]
@@ -304,6 +335,10 @@ def meek_rule2(G):
 
 
 def meek_rule3(G):
+    """
+    This function implements the third Meek's Rule.
+    """
+        
     
     list_of_nodes = list(G.nodes())
     
@@ -328,6 +363,9 @@ def meek_rule3(G):
 
 
 def meek_rule4(G):
+    """
+    This function implements the fourth Meek's Rule.
+    """
     
     list_of_nodes = list(G.nodes())
     
@@ -353,6 +391,10 @@ def meek_rule4(G):
 
 
 def meek_orientation(G, data_matrix, alpha):
+    """
+    This function orients the graph obtained after dealing with potential v structures.
+    In order to perform the orientation, the rules implemented above are used.
+    """
     
     # We build the moralize graph
     G, MBs_dict = build_moralized_graph(data_matrix, alpha)
@@ -360,7 +402,7 @@ def meek_orientation(G, data_matrix, alpha):
     # We build the graph keeping trace of the v structures
     G_start = second_step_GS(G,data_matrix, alpha, MBs_dict)
     
-    
+    # While it is possible, apply the rules. The order is fixed by choice
     while True:
         
         G_final = meek_rule1(G_start)
@@ -383,12 +425,19 @@ def meek_orientation(G, data_matrix, alpha):
 ########### TASK 2 HELPER FUNCTIONS #################################
 
 def ancestor(G_bidirected, S):
+    """
+    Given a graph G and a set of nodes S, this function computes and returns the
+    ancestor set of S (defined as the union of the ancestor sets of every node in S).
+    """
     
+    # Ensuring S is a set
     if not isinstance(S,set):
         raise TypeError
     
+    # Initializing the result
     result = set()
     
+    # Computing the ancestor set for every node in S and add its elements to results
     for node in S:
         
         ancestor_of_node = nx.ancestors(G_bidirected, node)
@@ -398,12 +447,14 @@ def ancestor(G_bidirected, S):
 
 
 def HHull(G_directed, G_bidirected, S):
+    """
+    This function implements the HHull algorithm. It receive a directed graph, a bidirected graph and 
+    a subset of vertices.
+    """
     
     set_S = set(S)
     F = set(G_directed.nodes())
-    
-    # directed graph, bidirected graph, subset of vertices
-    
+
     while True:
         
         # Finding F1
@@ -417,6 +468,7 @@ def HHull(G_directed, G_bidirected, S):
             print('Entering except condition')
             return set_S
         
+        # We find the largest component (maximal component) containing S
         F1 = connected_components_G_F[max_index] # set
         
         # Finding F2
@@ -432,12 +484,21 @@ def HHull(G_directed, G_bidirected, S):
         
 
 def hitting(S, set_of_sets):
+    """
+    This simple function checks whether S hits the set of sets, i.e. whether it 
+    has a non null intersection with all the sets in the set of sets.
+    """
     
+    # Counting the total number of elements (sets) contained in set of sets
     total_sets = len(set_of_sets)
     cont = 0
+    
+    # Looping over the set of sets to count the number of non empty intersections
     for set_ in set_of_sets:
         if len(S.intersection(set_)) != 0:
             cont+=1
+            
+    # Returning the result of the checking procedure
     if cont == total_sets:
         return True
     return False
