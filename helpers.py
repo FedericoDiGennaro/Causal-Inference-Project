@@ -449,10 +449,16 @@ def ancestor(G_bidirected, S):
 def HHull(G_directed, G_bidirected, S):
     """
     This function implements the HHull algorithm. It receive a directed graph, a bidirected graph and 
-    a subset of vertices.
+    a subset of vertices. This function implicitely assumes that all the nodes of S are contained in 
+    the same connected components (connected components are specific partitions of the graph we obtain
+    when running nx.connected_component on the graph). If this assumption is not satisfied, please refer
+    to GeneralMinCostIntervention.
     """
     
+    # We convert S to be set
     set_S = set(S)
+    
+    # We initialize F
     F = set(G_directed.nodes())
 
     while True:
@@ -460,7 +466,14 @@ def HHull(G_directed, G_bidirected, S):
         # Finding F1
         G_F_bidirected = G_bidirected.subgraph(F)       
         connected_components_G_F = [elem for elem in nx.connected_components(G_F_bidirected)]
+        
+        # Since we are assuming that all the nodes in S are included in the same connected components, we expect
+        # indices_and_len to have length equal to one. If not, we raise an error
         indices_and_len = [(index,len(elem)) for index,elem in enumerate(connected_components_G_F) if set_S.issubset(elem)]
+        
+        # We verify and check the assumption. If it is not satisfied, we raise an error. If the nodes of S are split
+        # across different partitions, then indices_and_len will be empty and have length equal to 0.
+        assert(len(indices_and_len) == 1)
         
         try:
             max_index = max(indices_and_len, key= lambda x: x[1])[0]
@@ -475,10 +488,9 @@ def HHull(G_directed, G_bidirected, S):
         G_F1_directed = G_directed.subgraph(F1)       
         F2 = ancestor(G_F1_directed, set_S)
         
-        if F2 != F:
-            
+        # Checking the condition to decide whether to continue or return the final result
+        if F2 != F:           
             F = F2
-        
         else:
             return F  
         
@@ -486,7 +498,7 @@ def HHull(G_directed, G_bidirected, S):
 def hitting(S, set_of_sets):
     """
     This simple function checks whether S hits the set of sets, i.e. whether it 
-    has a non null intersection with all the sets in the set of sets.
+    has a non empty intersection with all the sets in the set of sets.
     """
     
     # Counting the total number of elements (sets) contained in set of sets
@@ -498,40 +510,52 @@ def hitting(S, set_of_sets):
         if len(S.intersection(set_)) != 0:
             cont+=1
             
-    # Returning the result of the checking procedure
+    # Returning the result of the checking procedure (true if S hits, false otherwise)
     if cont == total_sets:
         return True
     return False
 
 
 def WMHS(set_of_sets, costs):
+    """ 
+    This function return the weighted minimum hitting set. Given a set of sets and a dictionary containing
+    the cost of intervening on each node, it returns the minimum cost solution which has non empty intersection
+    with every set in set of sets.
+    """
     
-    # set of sets is a list of sets
-    # costs is a dictionary
+    # Set of sets is a list of sets
+    # Costs is a dictionary having the nodes as keys and 
     
+    # Initializing the solution and the min_cost variable (which is set to assume the highes possible value by default)
     solution = set()
     min_cost = sum(costs.values()) # worst case
     
     universal_set = set()
     
+    # We perform the union over all sets in set of sets, in order to obtain a unique set containing all the elements
     for set_ in set_of_sets:
         universal_set = universal_set.union(set_)
-        
+     
+    # We generate the power set of the universal set
     power_set = list(chain.from_iterable(combinations(universal_set, r) for r in range(len(universal_set)+1)))
     
-    for set_ in power_set:
-        
+    # We loop over evey set in the power set. Each one of them might be a candidate solution
+    for set_ in power_set: 
         candidate_solution = set(set_)
         
-        flag = hitting(candidate_solution, set_of_sets)
+        # We start by checking if the current candidate solution hits the set of sets
+        flag = hitting(candidate_solution, set_of_sets) 
         
+        # If the current candidate hits the sets, then we compute its cost (sum of costs of its nodes) and we
+        # compare it to the best solution found so far
         if flag:
-            
             current_cost = 0
             
+            # We compute the cost by adding the cost of each node contained in the current candidate
             for node in candidate_solution:
                 current_cost+= costs[node]
             
+            # We compare the cost of the current solution to the best one found so far. If it's better, we save it
             if current_cost < min_cost:
                 solution = candidate_solution
                 min_cost = current_cost
@@ -540,23 +564,26 @@ def WMHS(set_of_sets, costs):
 
 
 def MinCostIntervention(S, G_directed, G_bidirected, costs):
+    """ 
+    This function implement the Min Cost intervention algorithm as described in the project description
+    and report. The function takes as inputs a set of nodes S (assuming all its nodes are contained in the same
+    connected components), an ADMG and a dictionary containing the cost of intervening on each node.
+    """
     
+    # We initialize useful variables
     F = []
-    
     V = set(G_directed.nodes())
     
-    H = HHull(G_directed, G_bidirected,S)
-    
-    if H == S:
-        
+    # We run HHull on S. Please notice that we are assuming that all the nodes in S
+    H = HHull(G_directed, G_bidirected,S) 
+    if H == S: 
         return set()
     
     while True:
-        
         while True:
             
+            # Solving argmin of costs problem              
             H_minus_S = H - S
-            # Solving argmin of costs problem           
             argmin = None
             min_cost = sum(costs.values()) + 1000
             for node in H_minus_S:
@@ -565,89 +592,91 @@ def MinCostIntervention(S, G_directed, G_bidirected, costs):
                     min_cost = costs[node]
             argmin = set([argmin])
             
-            
+            # Defining a new subset of nodes to restrict our graph using the previous solution
             H_minus_argmin = H - argmin
             
+            # Defining new subgraphs
             G_directed_H_minus_argmin = G_directed.subgraph(H_minus_argmin)
             G_bidirected_H_minus_argmin = G_bidirected.subgraph(H_minus_argmin) 
             
-            new_hull = HHull(G_directed_H_minus_argmin, G_bidirected_H_minus_argmin, S)
-            
+            # Running HHull on the new subgraph. Since we run HHull, we are again assuming
+            # the nodes of S are contained in the same connected component.
+            new_hull = HHull(G_directed_H_minus_argmin, G_bidirected_H_minus_argmin, S)       
             if new_hull == S:
-                
                 F.append(H)
                 break
-            
             else:
-                
                 H = new_hull
-                
-        #power_set_of_F = list(chain.from_iterable(combinations(F, r) for r in range(len(F)+1)))
+        
+        # We now loop over the sets contained in F and we subtract the set S given as input. This is essential
+        # in order to define the set of sets taken as input by WMHS
         set_of_sets = []
         for elem in F:
             new_elem = set(elem) - S
             if new_elem not in set_of_sets and new_elem != set():
                 set_of_sets.append(new_elem)
                 
+        # Finding the minimum cost hitting set
         A = WMHS(set_of_sets, costs)
         
+        # Defining a new subgraph
         V_minus_A = V - A
         G_directed_V_minus_A = G_directed.subgraph(V_minus_A)
         G_bidirected_V_minus_A = G_bidirected.subgraph(V_minus_A) 
         new_hull = HHull(G_directed_V_minus_A, G_bidirected_V_minus_A, S)
         
         if new_hull == S:
-            
             return A
         
         H = new_hull
         
+        
+def GeneralMinCostIntervention(S, G_directed, G_bidirected, costs):
+    """
+    This function implements the Min Cost Intervention algorithm in the general case, i.e. 
+    when the nodes of S are split across different connected components of the bidirected graph
+    given as input to the function.
+    """
+    
+    # We start by computing the connected components of the graph and we check whether all the nodes
+    # of S are included in the same components or not. The partitions among the nodes of S will be
+    # contained in the structure subsets_of_S
+    connected_components = nx.connected_components(G_bidirected)
+    valid_components = [elem for elem in connected_components if len(S.intersection(elem)) != 0 ]
+    subsets_of_S = []  
+    for component in valid_components:
+        temp = []
+        for element in component:
+            if element in S:
+                temp.append(element)
+        subsets_of_S.append(set(temp))
+    
+    # Subsets_of_S now contains a partition of the nodes of S which reflects the fact that each of these partitions
+    # are contained in different connected components of the graph given as input
+        
+    # After computing the partitions among the nodes of S, we need to run the code for every subset as we did
+    # before. Our idea is that of running the algorithm for every subset, in order to later compute the union 
+    # of the results 
+    final_result = set()
+    for subset_of_S in subsets_of_S:
+        temp_sol = MinCostIntervention(subset_of_S, G_directed, G_bidirected, costs)
+        final_result = final_result.union(temp_sol)
+    
+    return final_result
+    
 
-def initialize_cal_H(G_directed, G_bidirected, S):
-    pa_S = set()
-    S_conn = set()
-    
-    for node in list(S):
-        pa_S = pa_S.union(set(G_directed.predecessors(node)))
-        S_conn = S_conn.union(set(G_bidirected.neighbors(node)))
-        
-    pa_double = pa_S.intersection(S_conn)
-    
-    V = set(G_directed.nodes())
-    
-    # initialization
-    V_minus_pa_double = V - pa_double
-    G_directed_V_minus_pa_double = G_directed.subgraph(V_minus_pa_double)
-    G_bidirected_V_minus_pa_double = G_bidirected.subgraph(V_minus_pa_double) 
-    
-    # Hhull
-    H = HHull(G_directed_V_minus_pa_double, G_bidirected_V_minus_pa_double, S)
-    
-    list_of_nodes = list(H)
-    
-    pairs_comb = [tuple(elem) for elem in combinations(list_of_nodes, 2)]
-    
-    cal_H = nx.Graph()
-    
-    for node in list(H.union({'x','y'})):
-        cal_H.add_node(node)
-        
-    for pair in pairs_comb:
-        if pair in G_bidirected.edges():
-            cal_H.add_edge(pair[0], pair[1])
-            
-    for node in list(S):
-        cal_H.add_edge(node,'y')
-        
-    for node in list(pa_S.intersection(H)):
-        cal_H.add_edge('x',node)
-        
-    return cal_H, pa_S.intersection(H), pa_double
 
 def min_nodes_cut(G,source_set,S,weights):
+    """
+    This function allows to move from the min weight vertex cut to a max-flow / min-cut problem
+    according to the dual theory.
+    """
     
+    # We initialize an empty undirected graph
     weighted_edges_graph = nx.DiGraph()
 
+    # We proceed by adding nodes and edges to the graph. The set of node is given as input.
+    # Moreover, we add the capacity to each edge
     for node in source_set:
         weighted_edges_graph.add_edge('x',str(node)+'_in',capacity = np.inf)
     
@@ -660,8 +689,10 @@ def min_nodes_cut(G,source_set,S,weights):
         for neighbor in G.adj[node]:
             weighted_edges_graph.add_edge(str(node)+'_out',str(neighbor)+'_in',capacity = np.inf)
 
+    # We solve the min-cut problem using networkx
     cost, cut_sets = nx.minimum_cut(weighted_edges_graph,'x','y')
 
+    # We save the two partitions into two different variables
     setA , setB = cut_sets
 
     cut_set = set()
@@ -671,23 +702,26 @@ def min_nodes_cut(G,source_set,S,weights):
             
     return (cost,cut_set)
 
-def heuristic_algorithm(G_directed, G_bidirected, S, costs): # taken from Sina's paper
+def heuristic_algorithm(G_directed, G_bidirected, S, costs): 
     
-    # we need to move from min weith vertex cut to min weight edge cut and solve it with min flow max cut
+    """
+    This function implements how to solve the min weight vertex cut problem in order to later intervene on 
+    the returned solution and identify Q[S].
+    """
     
     H = HHull(G_directed, G_bidirected, S)
     
-    #cal_H, pa_inter_H, pa_double = initialize_cal_H(G_directed, G_bidirected, S)
-    
+    # Redefining the costs for all the nodes in the graph except for the ones in S
     new_costs = {key:value for key,value in costs.items() if key not in S}
-    
+   
+    # We now compute pa(S) intersection S, as stated in the project description
     pa_S = set()
-    
     for node in S:
         pa_S = pa_S.union(set(G_directed.predecessors(node)))
     
     pa_inter_H = H & pa_S
     
+    # We solve the problem using the previous function
     cost, cut_set = min_nodes_cut(G_bidirected.subgraph(H), pa_inter_H, S, new_costs)
     
     return cut_set
