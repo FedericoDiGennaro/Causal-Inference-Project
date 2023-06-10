@@ -669,23 +669,38 @@ def GeneralMinCostIntervention(S, G_directed, G_bidirected, costs):
 def min_nodes_cut(G,source_set,S,weights):
     """
     This function allows to move from the min weight vertex cut to a max-flow / min-cut problem
-    according to the dual theory.
+    according to the dual theory. Starting from the original undirected graph G, we build a new undirected
+    graph in which, for every node z in G, we create a pair of nodes (z_in, z_out) connected through an edge. If
+    z belongs to S, then the capacity of such edge is set to infinity (weights[z] the node otherwise).
+    We then recreate all the original connections contained in G, setting the weights to infinity.
+    This choice of assigning the weights is essential in order to ensure that, when running the min cut algorithm,
+    only edges of the form (z_in, z_out) for z not in S are considered. Therefore, if the final result contains 
+    an edge of the form (z_in, z_out), it will imply we have to intervene on z by analogy.
     """
     
-    # We initialize an empty undirected graph
+    # We initialize an empty undirected graph.
+    # The goal is that of building in which removing an edge corresponds to cutting a vertex
+    # in the original undirected graph G given as input. This is achieved by the way
+    # we assign the weight (capacity) to each edge.
     weighted_edges_graph = nx.DiGraph()
 
-    # We proceed by adding nodes and edges to the graph. The set of node is given as input.
-    # Moreover, we add the capacity to each edge
+    # We proceed by connecting the arbitrary node x to the nodes in source_set. Since the
+    # extremes of each edge are distinct nodes, we set the capacity to infinity
     for node in source_set:
         weighted_edges_graph.add_edge('x',str(node)+'_in',capacity = np.inf)
     
+    # For every node in S, we create a pair of nodes (node_in, node_out) connected through an edge.
+    # Since we cannot intervene (cut) the nodes in S, we make sure the min cut algorithm will
+    # ignore these edges by setting their capacity to infinity.
     for node in S:
         weighted_edges_graph.add_edge(str(node)+'_in',str(node)+'_out',capacity = np.inf)
         weighted_edges_graph.add_edge(str(node)+'_out','y',capacity = np.inf)
 
+    # For every one of the remaining nodes, we create a pair of nodes (node_in, node_out) connected through an edge.
+    # Since these remaining nodes are the ones on which we can intervene,
     for node in G.nodes - S:
         weighted_edges_graph.add_edge(str(node)+'_in',str(node)+'_out',capacity=weights[node])
+        # We now reconstruct the connections contained in G
         for neighbor in G.adj[node]:
             weighted_edges_graph.add_edge(str(node)+'_out',str(neighbor)+'_in',capacity = np.inf)
 
@@ -695,6 +710,8 @@ def min_nodes_cut(G,source_set,S,weights):
     # We save the two partitions into two different variables
     setA , setB = cut_sets
 
+    # Exploting the analogy between nodes in G and edges in weighted_edges_graph, we retrieve
+    # the nodes on which we should intervene (cut)
     cut_set = set()
     for node in G.nodes - S:
         if (str(node)+'_in' in setA and str(node)+'_out' in setB) or (str(node)+'_in' in setB and str(node)+'_out' in setA):
@@ -722,7 +739,7 @@ def heuristic_algorithm(G_directed, G_bidirected, S, costs):
     pa_inter_H = H & pa_S
     
     # We solve the problem using the previous function
-    cost, cut_set = min_nodes_cut(G_bidirected.subgraph(H), pa_inter_H, S, new_costs)
+    cost,cut_set = min_nodes_cut(G_bidirected.subgraph(H), pa_inter_H, S, new_costs)
     
     return cut_set
     
