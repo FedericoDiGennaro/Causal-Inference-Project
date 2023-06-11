@@ -424,7 +424,7 @@ def meek_orientation(G, data_matrix, alpha):
 
 ########### TASK 2 HELPER FUNCTIONS #################################
 
-def ancestor(G_bidirected, S):
+def ancestor(G_directed, S):
     """
     Given a graph G and a set of nodes S, this function computes and returns the
     ancestor set of S (defined as the union of the ancestor sets of every node in S).
@@ -440,19 +440,17 @@ def ancestor(G_bidirected, S):
     # Computing the ancestor set for every node in S and add its elements to results
     for node in S:
         
-        ancestor_of_node = nx.ancestors(G_bidirected, node)
+        ancestor_of_node = nx.ancestors(G_directed, node)
         result = result.union(ancestor_of_node)
     
-    return result.union(S)
+    return result.union(S) # since by definition we also need to include the nodes of S
 
 
 def HHull(G_directed, G_bidirected, S):
     """
     This function implements the HHull algorithm. It receive a directed graph, a bidirected graph and 
-    a subset of vertices. This function implicitely assumes that all the nodes of S are contained in 
-    the same connected components (connected components are specific partitions of the graph we obtain
-    when running nx.connected_component on the graph). If this assumption is not satisfied, please refer
-    to GeneralMinCostIntervention.
+    a subset of vertices. This function implicitely assumes that S is a c-component.
+    If this assumption is not satisfied, please refer to GeneralMinCostIntervention.
     """
     
     # We convert S to be set
@@ -469,6 +467,9 @@ def HHull(G_directed, G_bidirected, S):
         
         # Since we are assuming that all the nodes in S are included in the same connected components, we expect
         # indices_and_len to have length equal to one. If not, we raise an error
+        
+        # Here we exploit the assumption that S is a c-component. Therefore it is enough to keep
+        # the maximal connected components which contains all the nodes in S.
         indices_and_len = [(index,len(elem)) for index,elem in enumerate(connected_components_G_F) if set_S.issubset(elem)]
         
         # We verify and check the assumption. If it is not satisfied, we raise an error. If the nodes of S are split
@@ -607,7 +608,6 @@ def MinCostIntervention(S, G_directed, G_bidirected, costs):
                 break
             else:
                 H = new_hull
-        
         # We now loop over the sets contained in F and we subtract the set S given as input. This is essential
         # in order to define the set of sets taken as input by WMHS
         set_of_sets = []
@@ -626,7 +626,8 @@ def MinCostIntervention(S, G_directed, G_bidirected, costs):
         new_hull = HHull(G_directed_V_minus_A, G_bidirected_V_minus_A, S)
         
         if new_hull == S:
-            return A
+            # We not only return the minimum cost hitting solution, but also F (collection of discovered hedges)
+            return A, F
         
         H = new_hull
         
@@ -635,7 +636,13 @@ def GeneralMinCostIntervention(S, G_directed, G_bidirected, costs):
     """
     This function implements the Min Cost Intervention algorithm in the general case, i.e. 
     when the nodes of S are split across different connected components of the bidirected graph
-    given as input to the function.
+    given as input to the function. The idea behind this function is based on Theorem 1 provided
+    in the project description: a query Q[S] is identifiable if and only if there is no edge
+    formed for every partition S_1, S_2, ..., S_k of S. Therefore, it is enough to identify
+    such partition, run the HHull and MinCostIntervention algorithm on each one of these c-components and then return the
+    result defined as the union of the solutions of each subproblem. Infact, if we then intervene on the 
+    nodes returned for each partition, we ensure there will not be any hedge formed for any partition, 
+    thus making the query identifiable
     """
     
     # We start by computing the connected components of the graph and we check whether all the nodes
@@ -742,6 +749,52 @@ def heuristic_algorithm(G_directed, G_bidirected, S, costs):
     cost,cut_set = min_nodes_cut(G_bidirected.subgraph(H), pa_inter_H, S, new_costs)
     
     return cut_set
+
+
+def GeneralMinCostInterventionRiccardo(S, G_directed, G_bidirected, costs):
+    """
+    This function implements the Min Cost Intervention algorithm in the general case, i.e. 
+    when the nodes of S are split across different connected components of the bidirected graph
+    given as input to the function. The idea behind this function is based on Theorem 1 and Lemma 1 provided
+    in the project description: a query Q[S] is identifiable if and only if there is no edge
+    formed for every partition S_1, S_2, ..., S_k of S. Once all the hedges formed for such partitions are discovered   
+    ({Fi,1,...,Fi,mi} for every i = 1,2,...,k), the solution must correspond to the minimum cost hitting solution 
+    for the sets {(F1,1\S1),...,(F1,m1 \S1),(F2,1\S2),...,(Fk,mk \Sk)}.
+    Therefore, it is enough to identify such partitions, run the HHull and MinCostIntervention algorithm on each one of these c-
+    components in order to retrieve the sets {Fi,1,...,Fi,mi} for every i and then find the minimum cost hitting solution.
+    """
+    
+    # We start by computing the connected components of the graph and we check whether all the nodes
+    # of S are included in the same components or not. The partitions among the nodes of S will be
+    # contained in the structure subsets_of_S (S_1, S_2, ..., S_k)
+    connected_components = nx.connected_components(G_bidirected)
+    valid_components = [elem for elem in connected_components if len(S.intersection(elem)) != 0 ]
+    subsets_of_S = []  
+    for component in valid_components:
+        temp = []
+        for element in component:
+            if element in S:
+                temp.append(element)
+        subsets_of_S.append(set(temp))
+    
+    # Subsets_of_S now contains a partition of the nodes of S which reflects the fact that each of these partitions
+    # are contained in different connected components of the graph given as input
+        
+    # After computing the partitions among the nodes of S, we need to run the code for every subset as we did
+    # before. Our idea is that of running the algorithm for every subset, in order to later compute the union 
+    # of the discovered hedges and eventually identify the minimum cost hitting solution.
+    sets_of_all_discovered_hedges = []
+    
+    for subset_of_S in subsets_of_S:
+        _, F_of_partition = MinCostIntervention(subset_of_S, G_directed, G_bidirected, costs)
+        for hedge in F_of_partition:
+            hedge_minus_partition_of_S = hedge - subset_of_S
+            if (hedge_minus_partition_of_S not in sets_of_all_discovered_hedges) and (hedge_minus_partition_of_S != set()):
+                sets_of_all_discovered_hedges.append(hedge_minus_partition_of_S)
+        
+    final_result = WMHS(sets_of_all_discovered_hedges, costs)
+    
+    return final_result
     
     
     
