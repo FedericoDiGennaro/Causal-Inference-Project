@@ -12,6 +12,7 @@ from sklearn.metrics import f1_score
 import numpy as np
 import matplotlib.pyplot as plt
 import random
+from pulp import *
 
 
 ########### TASK 1 HELPER FUNCTIONS #################################
@@ -795,7 +796,77 @@ def GeneralMinCostInterventionRiccardo(S, G_directed, G_bidirected, costs):
     
     return final_result
     
+
+def LP_hitting_set(list_of_sets, costs):
+    """
+    Returns approximation of optimal hitting set: 
+    by relaxing the integer constraint, we include in the hitting set all decision variables with 
+    x(i) > 1/k, where k is the maximum set size
+    """
+
+    # Create single set from union of all sets
+    L = len(list_of_sets)
+    union_set = set().union(*list_of_sets)
     
+    if len(list_of_sets)>1:
+        
+        # Initialization
+        problem = LpProblem("hitting_set",LpMinimize)
+        
+        # Create the decision variables x, one for each node and imposing positivity constraint
+        x = LpVariable.dicts("x", union_set, lowBound=0)
+        
+        # Add the objective function (total cost to minimize) to the problem:
+        problem += lpSum(costs[elem] * x[elem] for elem in union_set)
+        
+        # Add constraint of at least a total weight of 1 for each set
+        for set_ in list_of_sets:
+            problem += lpSum(x[elem] for elem in set_) >= 1
+        
+        # Solve the minimization problem
+        problem.solve()
+        
+        # Add to the hitting set only the decision variables with value greater than 1/k
+        k = max(len(s) for s in list_of_sets)
+
+        hitting_set = {elem for elem in union_set if value(x[elem]) >= 1/k}
+        return hitting_set
+
+    # If we only have one set, return the element with minimum cost
+    elif len(list_of_sets) == 1: 
+        return {min(list_of_sets[0],key=lambda x: costs[x])}
+
+
+def LP_MinCostIntervention(S, G_directed, G_bidirected, costs):
+    # Function that runs algorithm similar to MinCostIntervention, 
+    # using the LP approach to compute hitting set 
+    F = []
+
+    H = HHull(G_directed, G_bidirected, S)
+    if H == S:
+        return set()
+
+    while True:
+        while True:
+            a = min(H - S, key=lambda v: costs[v])
+            H_minus_a = HHull(G_directed.subgraph(H-{a}), G_bidirected.subgraph(H-{a}), S)
+            if H_minus_a == S:
+                F.append(H) 
+                break
+            else:
+                H = H_minus_a
+
+        sets_minus_S = [element - S for element in F]
+        # Use Linear Programming algorithm to compute approximation of optimal hitting set
+        hitting_set = LP_hitting_set(sets_minus_S, costs)
+
+        V_minus_hitting_set = G_directed.nodes - hitting_set
+        H_minus_hitting_set = HHull(G_directed.subgraph(V_minus_hitting_set), G_bidirected.subgraph(V_minus_hitting_set), S)
+
+        if H_minus_hitting_set == S:
+            return hitting_set
+        else:
+            H = H_minus_hitting_set
     
     
     
