@@ -775,20 +775,20 @@ def LP_hitting_set(list_of_sets, costs):
     
     if len(list_of_sets)>1:
         
-        # Initialization
+        # Initialization of the problem
         problem = LpProblem("hitting_set",LpMinimize)
         
-        # Create the decision variables x, one for each node and imposing positivity constraint
+        # We now define the decision variable x and we impose the constraint for which it must be positive
         x = LpVariable.dicts("x", union_set, lowBound=0)
         
-        # Add the objective function (total cost to minimize) to the problem:
+        # We add to the problem the objective function, which corresponds to the total cost that we want to minimize
         problem += lpSum(costs[elem] * x[elem] for elem in union_set)
         
-        # Add constraint of at least a total weight of 1 for each set
+        # Add constraint of at least a total weight of 1 for each set (in order to have non trivial solutions)
         for set_ in list_of_sets:
             problem += lpSum(x[elem] for elem in set_) >= 1
         
-        # Solve the minimization problem
+        # Solve the minimization problem calling the method
         problem.solve()
         
         # Add to the hitting set only the decision variables with value greater than 1/k
@@ -803,35 +803,74 @@ def LP_hitting_set(list_of_sets, costs):
 
 
 def LP_MinCostIntervention(S, G_directed, G_bidirected, costs):
-    # Function that runs algorithm similar to MinCostIntervention, 
-    # using the LP approach to compute hitting set 
+    """
+    This function runs an algorithm which is similar to MinCostIntervention
+    but using the LP approach implemented above to compute the hitting set.
+    """
+    # The structure needed for this function is extremely similar to the previously implemented
+    # function MinCostIntervention
+    # We initialize useful variables
     F = []
-
-    H = HHull(G_directed, G_bidirected, S)
-    if H == S:
+    V = set(G_directed.nodes())
+    
+    # We run HHull on S. Please notice that we are assuming that G_[S] is a c-component
+    H = HHull(G_directed, G_bidirected,S) 
+    if H == S: 
+        # If we enter this condition, there is no hedge formed for Q[S] and therefore the query
+        # is already identifiable
         return set()
-
+    
     while True:
         while True:
-            a = min(H - S, key=lambda v: costs[v])
-            H_minus_a = HHull(G_directed.subgraph(H-{a}), G_bidirected.subgraph(H-{a}), S)
-            if H_minus_a == S:
-                F.append(H) 
+            
+            # Solving argmin of costs problem              
+            H_minus_S = H - S
+            argmin = None
+            min_cost = sum(costs.values()) + 1000
+            for node in H_minus_S:
+                if costs[node] <  min_cost:
+                    argmin = node
+                    min_cost = costs[node]
+            argmin = set([argmin])
+            
+            # Defining a new subset of nodes to restrict our graph using the previous solution
+            H_minus_argmin = H - argmin
+            
+            # Defining new subgraphs
+            G_directed_H_minus_argmin = G_directed.subgraph(H_minus_argmin)
+            G_bidirected_H_minus_argmin = G_bidirected.subgraph(H_minus_argmin) 
+            
+            # Running HHull on the new subgraph. Since we run HHull, we are again assuming
+            # the nodes of S are contained in the same connected component.
+            new_hull = HHull(G_directed_H_minus_argmin, G_bidirected_H_minus_argmin, S)       
+            if new_hull == S:
+                F.append(H)
                 break
             else:
-                H = H_minus_a
-
-        sets_minus_S = [element - S for element in F]
-        # Use Linear Programming algorithm to compute approximation of optimal hitting set
-        hitting_set = LP_hitting_set(sets_minus_S, costs)
-
-        V_minus_hitting_set = G_directed.nodes - hitting_set
-        H_minus_hitting_set = HHull(G_directed.subgraph(V_minus_hitting_set), G_bidirected.subgraph(V_minus_hitting_set), S)
-
-        if H_minus_hitting_set == S:
-            return hitting_set
-        else:
-            H = H_minus_hitting_set
+                H = new_hull
+        # We now loop over the sets contained in F and we subtract the set S given as input. This is essential
+        # in order to define the set of sets taken as input by WMHS
+        set_of_sets = []
+        for elem in F:
+            new_elem = set(elem) - S
+            if new_elem not in set_of_sets and new_elem != set():
+                set_of_sets.append(new_elem)
+                
+        # Finding the minimum cost hitting set using the Linear Programming approach
+        A = LP_hitting_set(set_of_sets, costs)
+        
+        # Defining a new subgraph
+        V_minus_A = V - A
+        G_directed_V_minus_A = G_directed.subgraph(V_minus_A)
+        G_bidirected_V_minus_A = G_bidirected.subgraph(V_minus_A) 
+        new_hull = HHull(G_directed_V_minus_A, G_bidirected_V_minus_A, S)
+        
+        if new_hull == S:
+            # We not only return the minimum cost hitting solution, but also F (collection of discovered hedges)
+            return A
+        
+        H = new_hull
+        
     
     
     
