@@ -432,7 +432,7 @@ def meek_orientation(G, data_matrix, alpha):
 
 def ancestor(G_directed, S):
     """
-    Given a graph G and a set of nodes S, this function computes and returns the
+    Given a directed graph G and a set of nodes S, this function computes and returns the
     ancestor set of S (defined as the union of the ancestor sets of every node in S).
     """
     
@@ -473,7 +473,7 @@ def HHull(G_directed, G_bidirected, S):
         connected_components_G_F = [elem for elem in nx.connected_components(G_F_bidirected)]
         
         # Since we are assuming that all the nodes in S are included in the same connected components, we expect
-        # indices_and_len to have length equal to one. If not, we raise an error
+        # indices_and_len to have length equal to one
         
         # Here we exploit the assumption that S is a c-component. Therefore it is enough to keep
         # the maximal connected components which contains all the nodes in S.
@@ -501,7 +501,7 @@ def HHull(G_directed, G_bidirected, S):
 
 def hitting(S, set_of_sets):
     """
-    This simple function checks whether S hits the set of sets, i.e. whether it 
+    This simple function checks whether the input argument S hits the set of sets, i.e. whether it 
     has a non empty intersection with all the sets in the set of sets.
     """
     
@@ -522,7 +522,7 @@ def hitting(S, set_of_sets):
 
 def WMHS(set_of_sets, costs):
     """ 
-    This function return the weighted minimum hitting set. Given a set of sets and a dictionary containing
+    This function returns the weighted minimum hitting set. Given a set of sets and a dictionary containing
     the cost of intervening on each node, it returns the minimum cost solution which has non empty intersection
     with every set in set of sets.
     """
@@ -530,7 +530,7 @@ def WMHS(set_of_sets, costs):
     # Set of sets is a list of sets
     # Costs is a dictionary having the nodes as keys and 
     
-    # Initializing the solution and the min_cost variable (which is set to assume the highes possible value by default)
+    # Initializing the solution and the min_cost variable (which initially assumes the highest possible value by default)
     solution = set()
     min_cost = sum(costs.values()) # worst case
     
@@ -636,54 +636,13 @@ def MinCostIntervention(S, G_directed, G_bidirected, costs):
         
         H = new_hull
         
-        
-def GeneralMinCostIntervention(S, G_directed, G_bidirected, costs):
-    """
-    This function implements the Min Cost Intervention algorithm in the general case, i.e. 
-    when the nodes of S are split across different connected components of the bidirected graph
-    given as input to the function. The idea behind this function is based on Theorem 1 provided
-    in the project description: a query Q[S] is identifiable if and only if there is no edge
-    formed for every partition S_1, S_2, ..., S_k of S. Therefore, it is enough to identify
-    such partition, run the HHull and MinCostIntervention algorithm on each one of these c-components and then return the
-    result defined as the union of the solutions of each subproblem. Infact, if we then intervene on the 
-    nodes returned for each partition, we ensure there will not be any hedge formed for any partition, 
-    thus making the query identifiable
-    """
-    
-    # We start by computing the connected components of the graph and we check whether all the nodes
-    # of S are included in the same components or not. The partitions among the nodes of S will be
-    # contained in the structure subsets_of_S
-    connected_components = nx.connected_components(G_bidirected)
-    valid_components = [elem for elem in connected_components if len(S.intersection(elem)) != 0 ]
-    subsets_of_S = []  
-    for component in valid_components:
-        temp = []
-        for element in component:
-            if element in S:
-                temp.append(element)
-        subsets_of_S.append(set(temp))
-    
-    # Subsets_of_S now contains a partition of the nodes of S which reflects the fact that each of these partitions
-    # are contained in different connected components of the graph given as input
-        
-    # After computing the partitions among the nodes of S, we need to run the code for every subset as we did
-    # before. Our idea is that of running the algorithm for every subset, in order to later compute the union 
-    # of the results 
-    final_result = set()
-    for subset_of_S in subsets_of_S:
-        temp_sol = MinCostIntervention(subset_of_S, G_directed, G_bidirected, costs)
-        final_result = final_result.union(temp_sol)
-    
-    return final_result
-    
-
 
 def min_nodes_cut(G,source_set,S,weights):
     """
     This function allows to move from the min weight vertex cut to a max-flow / min-cut problem
     according to the dual theory. Starting from the original undirected graph G, we build a new undirected
     graph in which, for every node z in G, we create a pair of nodes (z_in, z_out) connected through an edge. If
-    z belongs to S, then the capacity of such edge is set to infinity (weights[z] the node otherwise).
+    z belongs to S, then the capacity of such edge is set to infinity (weights[z] otherwise).
     We then recreate all the original connections contained in G, setting the weights to infinity.
     This choice of assigning the weights is essential in order to ensure that, when running the min cut algorithm,
     only edges of the form (z_in, z_out) for z not in S are considered. Therefore, if the final result contains 
@@ -691,7 +650,7 @@ def min_nodes_cut(G,source_set,S,weights):
     """
     
     # We initialize an empty undirected graph.
-    # The goal is that of building in which removing an edge corresponds to cutting a vertex
+    # The goal is that of building a graph in which removing an edge corresponds to cutting a vertex
     # in the original undirected graph G given as input. This is achieved by the way
     # we assign the weight (capacity) to each edge.
     weighted_edges_graph = nx.DiGraph()
@@ -709,10 +668,11 @@ def min_nodes_cut(G,source_set,S,weights):
         weighted_edges_graph.add_edge(str(node)+'_out','y',capacity = np.inf)
 
     # For every one of the remaining nodes, we create a pair of nodes (node_in, node_out) connected through an edge.
-    # Since these remaining nodes are the ones on which we can intervene,
+    # Since these remaining nodes are the ones on which we can intervene, we assign them a weight which is
+    # equal to the cost of intervening on the vertex.
     for node in G.nodes - S:
         weighted_edges_graph.add_edge(str(node)+'_in',str(node)+'_out',capacity=weights[node])
-        # We now reconstruct the connections contained in G
+        # We now reconstruct the connections contained in G, setting the capacity to infinity
         for neighbor in G.adj[node]:
             weighted_edges_graph.add_edge(str(node)+'_out',str(neighbor)+'_in',capacity = np.inf)
 
@@ -755,7 +715,7 @@ def heuristic_algorithm(G_directed, G_bidirected, S, costs):
     return cut_set
 
 
-def GeneralMinCostInterventionRiccardo(S, G_directed, G_bidirected, costs):
+def GeneralMinCostIntervention(S, G_directed, G_bidirected, costs):
     """
     This function implements the Min Cost Intervention algorithm in the general case, i.e. 
     when the nodes of S are split across different connected components of the bidirected graph
@@ -804,9 +764,9 @@ def GeneralMinCostInterventionRiccardo(S, G_directed, G_bidirected, costs):
 
 def LP_hitting_set(list_of_sets, costs):
     """
-    Returns approximation of optimal hitting set: 
+    This function returns an approximation of optimal hitting set: 
     by relaxing the integer constraint, we include in the hitting set all decision variables with 
-    x(i) > 1/k, where k is the maximum set size
+    x(i) > 1/k, where k is the maximum set size.
     """
 
     # Create single set from union of all sets
