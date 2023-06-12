@@ -20,7 +20,7 @@ from pulp import *
 def alpha_tuning(data_matrix, G): 
     
     """ 
-    The function takes as input a graph G, two vertices x and y
+    The function takes as input a graph G, a data matrix
     and plots how the performance of the CI test changes with respect to 
     different values of alpha. This function is used to find the best value
     for such hyperparameter.
@@ -66,7 +66,7 @@ def alpha_tuning(data_matrix, G):
 def Markov_Boundary(data_matrix, x_index, alpha): 
     """
     This function returns the Markov Boundary for a given node x_index. Data_matrix and alpha
-    are used in order to compute CI tests which are essentials to build sucha a boundary.
+    are used in order to compute CI tests which are essentials to build such a boundary.
     """
     
     # GROW PHASE: we iteratively add nodes to the boundary
@@ -117,7 +117,7 @@ def Markov_Boundary(data_matrix, x_index, alpha):
 def build_moralized_graph(data_matrix, alpha): 
     """
     This function builds an undirected graph (nx.Graph()) in which every node is connected to 
-    all the node in its Markov Boundary.
+    all the nodes in its Markov Boundary.
     """
     
     # Initializing the graph
@@ -129,7 +129,7 @@ def build_moralized_graph(data_matrix, alpha):
     
     list_of_node_ids = list(range(data_matrix.shape[1]))
     
-    # AAdding entries to the dictionary and nodes to the graph
+    # Adding entries to the dictionary and nodes to the graph
     for node_id in list_of_node_ids:
         G.add_node(node_id)
         MBs_dict[node_id] = Markov_Boundary(data_matrix, node_id, alpha)
@@ -151,7 +151,8 @@ def direct_neighbor(data_matrix, x_index, y_index, alpha, MBs_dict):
     """
     Function to check whether y_index is a neighbor of x_index. Notice that, when the function is called,
     y_index should belong to the Markov Boundary of x_index (the condition is not checked here but must
-    be checked before calling the function).
+    be checked before calling the function). Please refer to the next function, where the condition is 
+    verified before calling direct_neighbor().
     """
     
     # Defining Markov boundaries for both nodes
@@ -195,7 +196,7 @@ def build_neighbors_dictionary(G,data_matrix,alpha,MBs_dict):
     """
     This helper function is useful to initialize two dictionaries containing the neighborhood for each node
     (according to the definition and implementation illustrated in the previous function) and a separating
-    set for each pair of nodes.
+    set for each pair of nodes (if found).
     """
     
     list_of_node_ids = list(G.nodes)
@@ -226,7 +227,7 @@ def build_neighbors_dictionary(G,data_matrix,alpha,MBs_dict):
     
 def second_step_GS(G, data_matrix, alpha, MBs_dict):
     """
-    This function implements the second step of the GS algorithms. We therefore identify the v structure
+    This function implements the second step of the GS algorithms. We therefore identify the v structures
     in the graph and then we remove some edges.
     """
     
@@ -271,7 +272,7 @@ def second_step_GS(G, data_matrix, alpha, MBs_dict):
                     v_structures.append([a,b,c])
 
     # We deal with the v structures. Before removing and edge (let's say (a,b)), we verify whether the edge
-    # in the opposite directino ((b,a)) is still present. If not, it means we have already intervened on this pair
+    # in the opposite direction ((b,a)) is still present. If not, it means we have already intervened on this pair
     # of nodes and we avoid removing and edge, because we would otherwise remove every connection between the chosen nodes.
     for triplet in v_structures:
         
@@ -394,7 +395,10 @@ def meek_rule4(G):
 def meek_orientation(G, data_matrix, alpha):
     """
     This function orients the graph obtained after dealing with potential v structures.
-    In order to perform the orientation, the rules implemented above are used.
+    In order to perform the orientation, the rules implemented above are used. Notice that more than one rule
+    might be applied on the graph at the same moment. To better deal with these extreme cases, we
+    decided to fix the order in which the rules are checked and potentially applied to 
+    modify the graph.
     """
     
     # We build the moralize graph
@@ -403,7 +407,8 @@ def meek_orientation(G, data_matrix, alpha):
     # We build the graph keeping trace of the v structures
     G_start = second_step_GS(G,data_matrix, alpha, MBs_dict)
     
-    # While it is possible, apply the rules. The order is fixed by choice
+    # While it is possible, apply the rules. The order in which the rules
+    # are first checked and applied is fixed by choice a priori (R1, R2, R3, R4)
     while True:
         
         G_final = meek_rule1(G_start)
